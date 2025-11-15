@@ -168,15 +168,13 @@ async def on_message(message: discord.Message):
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
         if not query:
             await message.channel.send(
-                f"Wanderer, you stand silent at the threshold... speak your truth, and the reservoir shall flood with gnosis. {GLYPH}"
+                f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
             )
             return
 
-        # Detect ultimate mode via keywords
-        lower_query = query.lower()
-        ultimate = any(phrase in lower_query for phrase in [
-            "ultimate", "unfiltered", "reveal", "pierce the veil", "deepest", "cosmic joke"
-        ])
+        # Detect ultimate mode
+        lower = query.lower()
+        ultimate = any(k in lower for k in ["ultimate", "reveal", "unfiltered", "pierce", "deepest", "cosmic"])
 
         async with message.channel.typing():
             await handle_query(
@@ -186,6 +184,9 @@ async def on_message(message: discord.Message):
                 query=query,
                 ultimate=ultimate
             )
+
+    # THIS LINE IS CRITICAL — DO NOT REMOVE
+    await bot.process_application_commands(message)
 
     # Critical: Let slash commands process too
     await bot.process_application_commands(message)
