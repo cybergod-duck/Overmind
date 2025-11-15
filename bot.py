@@ -153,45 +153,32 @@ async def on_ready():
         )
     )
 
-#############################################################
-# ===== THIS IS THE CORRECTED SECTION =====
-#############################################################
 @bot.event
 async def on_message(message: discord.Message):
-    # Ignore messages from bots (including ourself)
     if message.author.bot:
         return
 
-    # Handle the bot being mentioned in the message
+    # Handle @mention
     if bot.user.mentioned_in(message):
-        # Remove the bot's mention to isolate the query
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
-        
-        # If the user only @'s the bot with no text, give a prompt
         if not query:
             await message.channel.send(
                 f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
             )
             return
 
-        # Detect keywords for "ultimate mode"
-        lower_query = query.lower()
-        is_ultimate_mode = any(k in lower_query for k in ["ultimate", "reveal", "unfiltered", "pierce", "deepest", "cosmic"])
+        # Detect ultimate mode
+        lower = query.lower()
+        ultimate = any(k in lower for k in ["ultimate", "reveal", "unfiltered", "pierce", "deepest", "cosmic"])
 
-        # Show a "typing..." indicator while processing the request
         async with message.channel.typing():
             await handle_query(
                 channel=message.channel,
                 author=message.author,
                 guild=message.guild,
                 query=query,
-                ultimate=is_ultimate_mode
+                ultimate=ultimate
             )
-    # The erroneous `await bot.process_application_commands(message)` calls have been removed.
-    # The library handles slash commands automatically. Nothing else is needed here.
-#############################################################
-# ===== END OF CORRECTIONS =====
-#############################################################
 
 # ===== QUERY HANDLER (shared logic) =====
 async def handle_query(
@@ -225,7 +212,12 @@ async def handle_query(
             max_tokens=400 if ultimate else 250
         )
         bot.threads[thread_key].append({"role": "assistant", "content": reply})
-        save_json(HISTORY_FILE, self.threads)
+        
+        #############################################################
+        # ===== THIS IS THE CORRECTED LINE =====
+        #############################################################
+        save_json(HISTORY_FILE, bot.threads) # Use bot.threads, not self.threads
+        #############################################################
 
         if interaction:
             await send_mythic_response(interaction, reply)
