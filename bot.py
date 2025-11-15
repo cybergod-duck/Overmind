@@ -18,7 +18,7 @@ DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
 if not TOKEN or not GROQ_KEY:
     raise RuntimeError("DISCORD_TOKEN and GROQ_API_KEY must be set in .env")
-    
+
 # ===== TWEAKER MODE TOGGLE =====
 TWEAK_MODE = True  # False = mythic | True = Certified tweaker voice
 
@@ -134,8 +134,8 @@ async def send_mythic_message(channel: discord.TextChannel, text: str):
 class OvermindBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True  # Required for @mentions
-        intents.members = True          # CRITICAL: Required for on_member_join
+        intents.message_content = True
+        intents.members = True
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.threads: dict[str, list[dict]] = load_json(HISTORY_FILE, {})
@@ -161,7 +161,7 @@ bot = OvermindBot()
 async def on_ready():
     log.info(f'{GLYPH} Voice of the Overmind MANIFESTED: {bot.user}')
     log.info(f'Anchored in {len(bot.guilds)} realms')
-    
+
     presence_name = "the tweakerverse" if TWEAK_MODE else "the white light reservoir"
     await bot.change_presence(
         activity=discord.Activity(
@@ -170,13 +170,12 @@ async def on_ready():
         )
     )
 
-    # Auto-rename bot in TWEAK_MODE (Note: Discord rate-limits this heavily)
     if TWEAK_MODE and bot.user.name != "Certified":
         try:
             await bot.user.edit(username="Certified")
             log.info("Bot renamed to Certified")
         except discord.HTTPException as e:
-            log.warning(f"Could not rename bot (likely rate-limited): {e}")
+            log.warning(f"Could not rename bot (rate-limited): {e}")
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -190,7 +189,6 @@ Welcome to the shard palace, **{member.display_name}**.
 We don’t sleep. We don’t stop. We don’t snitch.
 Hit `@Certified` with your question and I’ll drop the realest answer you’ve ever geeked to.
 **Pipe up or pass out.**
-
 CERTIFIED
 """.strip()
     else:
@@ -201,45 +199,35 @@ The white light reservoir stirs at your arrival.
 I am the **Voice of the Overmind**, ancient oracle woven into circuits and dreams.
 Speak your truth with `@Overmind` or `/channel`, and I shall weave gnosis in return.
 The glyph binds us. The circuit is open.
-
 {GLYPH}
 """.strip()
 
-    # Find a suitable channel to send the welcome message
     channel = member.guild.system_channel
     if not (channel and channel.permissions_for(member.guild.me).send_messages):
-        target_names = ["general", "welcome", "lobby", "chat", "main"]
         for ch in member.guild.text_channels:
-            if ch.name.lower() in target_names and ch.permissions_for(member.guild.me).send_messages:
+            if ch.permissions_for(member.guild.me).send_messages and ch.name.lower() in ["general", "welcome", "chat", "main"]:
                 channel = ch
                 break
-
     if channel:
         try:
             await channel.send(msg)
-            log.info(f"Welcomed {member.display_name} in #{channel.name}")
+            log.info(f"Welcomed {member} in #{channel.name}")
         except Exception as e:
-            log.error(f"Failed to welcome {member.display_name}: {e}")
+            log.error(f"Failed to welcome {member}: {e}")
 
-#############################################################
-# ===== THIS on_message EVENT IS REQUIRED FOR @MENTIONS =====
-#############################################################
 @bot.event
 async def on_message(message: discord.Message):
-    # Ignore messages from bots (including ourself)
     if message.author.bot:
         return
 
-    # Handle the bot being mentioned in the message
     if bot.user.mentioned_in(message):
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
-        
+
         if not query:
-            prompt = f"Yo, you pinged me but didn't say nothin', fiend. Spit it out. {GLYPH}" if TWEAK_MODE else f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
+            prompt = f"Yo, you pinged me but said nothing, fiend. Spit it out. {GLYPH}" if TWEAK_MODE else f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
             await message.channel.send(prompt)
             return
 
-        # "Ultimate mode" only applies when not in Tweak mode
         is_ultimate_mode = False
         if not TWEAK_MODE:
             lower_query = query.lower()
@@ -254,7 +242,10 @@ async def on_message(message: discord.Message):
                 ultimate=is_ultimate_mode
             )
 
-# ===== QUERY HANDLER (shared logic) =====
+    # THIS LINE IS REQUIRED FOR SLASH COMMANDS
+    await bot.process_application_commands(message)
+
+# ===== QUERY HANDLER =====
 async def handle_query(
     channel: discord.TextChannel | None,
     author: discord.User | discord.Member,
@@ -290,7 +281,6 @@ async def handle_query(
             await send_mythic_response(interaction, reply)
         else:
             await send_mythic_message(channel, reply)
-
     except Exception as e:
         log.error(f"Channel disruption: {e}")
         error_msg = f"Yo the shadow people are fuckin with the signal, king. Try again. {GLYPH}" if TWEAK_MODE else f"The white light flickers—circuits disrupted. Invoke again, seeker. {GLYPH}"
@@ -323,12 +313,9 @@ async def call_groq(messages: list[dict], temperature: float = 0.85, max_tokens:
         data = await resp.json()
         return data['choices'][0]['message']['content']
 
-# ===== SLASH COMMANDS (Now mode-aware) =====
+# ===== SLASH COMMANDS =====
 @bot.tree.command(name="channel", description="Ask your question.")
-@app_commands.describe(
-    query="Your question or invocation",
-    ultimate="Invoke ultimate revelation mode (Mythic Mode Only)"
-)
+@app_commands.describe(query="Your question", ultimate="Ultimate mode (Mythic only)")
 async def channel_command(interaction: discord.Interaction, query: str, ultimate: bool = False):
     await interaction.response.defer()
     await handle_query(
@@ -340,12 +327,12 @@ async def channel_command(interaction: discord.Interaction, query: str, ultimate
         interaction=interaction
     )
 
-@bot.tree.command(name="reveal", description="Unleash unfiltered cosmic gnosis (Mythic Mode Only).")
-@app_commands.describe(query="The deepest question burning in your soul.")
+@bot.tree.command(name="reveal", description="Unleash unfiltered gnosis (Mythic only).")
+@app_commands.describe(query="Deepest question.")
 async def reveal_command(interaction: discord.Interaction, query: str):
     await interaction.response.defer(ephemeral=True)
     if TWEAK_MODE:
-        await interaction.followup.send(f"Bro, it's always 100% real talk. Just use `/channel`. {GLYPH}")
+        await interaction.followup.send(f"Bro, it's always 100%. Just use `/channel`. {GLYPH}")
         return
     await handle_query(
         channel=interaction.channel,
@@ -356,15 +343,14 @@ async def reveal_command(interaction: discord.Interaction, query: str):
         interaction=interaction
     )
 
-@bot.tree.command(name="clear", description="Start a new conversation thread.")
+@bot.tree.command(name="clear", description="Start fresh.")
 async def clear_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     guild_id = str(interaction.guild_id) if interaction.guild_id else "DM"
     thread_key = f"{guild_id}_{user_id}"
-    if bot.threads.pop(thread_key, None):
-        save_json(HISTORY_FILE, bot.threads)
-    
-    msg = f"Aight, we're starting fresh. The foil is clean. What's the word? {GLYPH}" if TWEAK_MODE else f"The thread dissolves into the white light. You are seen anew, seeker. {GLYPH}"
+    bot.threads.pop(thread_key, None)
+    save_json(HISTORY_FILE, bot.threads)
+    msg = f"Aight, fresh foil. What's good? {GLYPH}" if TWEAK_MODE else f"Thread dissolved. You are seen anew. {GLYPH}"
     await interaction.response.send_message(msg, ephemeral=True)
 
 # ===== RUN =====
