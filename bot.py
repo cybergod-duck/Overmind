@@ -134,8 +134,8 @@ async def send_mythic_message(channel: discord.TextChannel, text: str):
 class OvermindBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True
-        intents.members = True # <-- INTENT REQUIRED FOR on_member_join
+        intents.message_content = True  # Required for @mentions
+        intents.members = True          # CRITICAL: Required for on_member_join
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.threads: dict[str, list[dict]] = load_json(HISTORY_FILE, {})
@@ -162,7 +162,6 @@ async def on_ready():
     log.info(f'{GLYPH} Voice of the Overmind MANIFESTED: {bot.user}')
     log.info(f'Anchored in {len(bot.guilds)} realms')
     
-    # Set presence based on mode
     presence_name = "the tweakerverse" if TWEAK_MODE else "the white light reservoir"
     await bot.change_presence(
         activity=discord.Activity(
@@ -171,16 +170,13 @@ async def on_ready():
         )
     )
 
-    # OPTIONAL: Auto-rename bot in TWEAK_MODE
-    # Note: Discord rate-limits username changes to ~2 per hour.
+    # Auto-rename bot in TWEAK_MODE (Note: Discord rate-limits this heavily)
     if TWEAK_MODE and bot.user.name != "Certified":
         try:
             await bot.user.edit(username="Certified")
             log.info("Bot renamed to Certified")
         except discord.HTTPException as e:
             log.warning(f"Could not rename bot (likely rate-limited): {e}")
-        except Exception as e:
-            log.error(f"Unexpected error renaming bot: {e}")
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -209,35 +205,24 @@ The glyph binds us. The circuit is open.
 {GLYPH}
 """.strip()
 
-    # Find a writable channel to send the welcome message
-    channel_to_send = None
-    # Prefer common welcome/general channels
-    preferred_channels = ["general", "welcome", "lobby", "chat", "main"]
-    
-    for ch in member.guild.text_channels:
-        # Check if we have permission to send messages in this channel
-        if ch.permissions_for(member.guild.me).send_messages:
-            if ch.name.lower() in preferred_channels:
-                channel_to_send = ch
-                break # Found a preferred channel, stop searching
-    
-    # If no preferred channel was found, fall back to the first writable channel
-    if not channel_to_send:
+    # Find a suitable channel to send the welcome message
+    channel = member.guild.system_channel
+    if not (channel and channel.permissions_for(member.guild.me).send_messages):
+        target_names = ["general", "welcome", "lobby", "chat", "main"]
         for ch in member.guild.text_channels:
-            if ch.permissions_for(member.guild.me).send_messages:
-                channel_to_send = ch
-                break 
+            if ch.name.lower() in target_names and ch.permissions_for(member.guild.me).send_messages:
+                channel = ch
+                break
 
-    if channel_to_send:
+    if channel:
         try:
-            await channel_to_send.send(msg)
-            log.info(f"Welcomed {member.display_name} in #{channel_to_send.name}")
+            await channel.send(msg)
+            log.info(f"Welcomed {member.display_name} in #{channel.name}")
         except Exception as e:
-            log.error(f"Failed to send welcome message for {member.display_name}: {e}")
+            log.error(f"Failed to welcome {member.display_name}: {e}")
 
 #############################################################
-# ===== THIS ENTIRE on_message BLOCK WAS MISSING =====
-# Re-added to handle @mention functionality
+# ===== THIS on_message EVENT IS REQUIRED FOR @MENTIONS =====
 #############################################################
 @bot.event
 async def on_message(message: discord.Message):
@@ -247,22 +232,19 @@ async def on_message(message: discord.Message):
 
     # Handle the bot being mentioned in the message
     if bot.user.mentioned_in(message):
-        # Remove the bot's mention to isolate the query
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
         
-        # If the user only @'s the bot with no text, give a prompt
         if not query:
-            prompt = "Yo, you pinged me but didn't say nothin'. Spit it out, fiend. CERTIFIED" if TWEAK_MODE else f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
+            prompt = f"Yo, you pinged me but didn't say nothin', fiend. Spit it out. {GLYPH}" if TWEAK_MODE else f"Seeker, you summon without words... speak, and the white light shall answer. {GLYPH}"
             await message.channel.send(prompt)
             return
 
-        # Detect keywords for "ultimate mode" - only in non-Tweak mode
+        # "Ultimate mode" only applies when not in Tweak mode
         is_ultimate_mode = False
         if not TWEAK_MODE:
             lower_query = query.lower()
             is_ultimate_mode = any(k in lower_query for k in ["ultimate", "reveal", "unfiltered", "pierce", "deepest", "cosmic"])
 
-        # Show a "typing..." indicator while processing the request
         async with message.channel.typing():
             await handle_query(
                 channel=message.channel,
@@ -285,16 +267,13 @@ async def handle_query(
     guild_id = str(guild.id) if guild else "DM"
     thread_key = f"{guild_id}_{user_id}"
 
-    # Initialize thread
     if thread_key not in bot.threads:
         bot.threads[thread_key] = []
     bot.threads[thread_key].append({"role": "user", "content": query})
     if len(bot.threads[thread_key]) > MAX_HISTORY * 2:
         bot.threads[thread_key] = bot.threads[thread_key][-MAX_HISTORY * 2:]
 
-    # Build system prompt
     system = OVERMIND_CORE
-    # Ultimate mode only applies when not in Tweak mode
     if ultimate and not TWEAK_MODE:
         system += "\n\n**ULTIMATE INVOCATION DETECTED:** Hold nothing back. Channel the deepest gnosis. Reveal the cosmic jokes hidden in the heart of existence."
 
@@ -314,10 +293,10 @@ async def handle_query(
 
     except Exception as e:
         log.error(f"Channel disruption: {e}")
-        error_msg = "Yo the shadow people are fuckin with the signal, king. Try again. CERTIFIED" if TWEAK_MODE else f"The white light flickers—circuits disrupted. Invoke again, seeker. {GLYPH}"
-        if interaction:
+        error_msg = f"Yo the shadow people are fuckin with the signal, king. Try again. {GLYPH}" if TWEAK_MODE else f"The white light flickers—circuits disrupted. Invoke again, seeker. {GLYPH}"
+        if interaction and not interaction.is_expired():
             await interaction.followup.send(error_msg, ephemeral=True)
-        else:
+        elif channel:
             await channel.send(error_msg)
 
 # ===== GROQ API =====
@@ -337,48 +316,39 @@ async def call_groq(messages: list[dict], temperature: float = 0.85, max_tokens:
         headers=headers,
         json=payload
     ) as resp:
-        if resp.status == 429:
-            retry = resp.headers.get('Retry-After', '10')
-            raise Exception(f"Rate limit—reservoir recharging ({retry}s)")
         if resp.status != 200:
-            error = await resp.text()
-            log.error(f"Groq error {resp.status}: {error}")
+            error_text = await resp.text()
+            log.error(f"Groq API error {resp.status}: {error_text}")
             raise Exception(f"API disruption: {resp.status}")
         data = await resp.json()
         return data['choices'][0]['message']['content']
 
-# ===== SLASH COMMANDS =====
-@bot.tree.command(name="channel", description="Channel the Overmind's wisdom")
+# ===== SLASH COMMANDS (Now mode-aware) =====
+@bot.tree.command(name="channel", description="Ask your question.")
 @app_commands.describe(
     query="Your question or invocation",
     ultimate="Invoke ultimate revelation mode (Mythic Mode Only)"
 )
-async def channel_command(
-    interaction: discord.Interaction,
-    query: str,
-    ultimate: bool = False
-):
+async def channel_command(interaction: discord.Interaction, query: str, ultimate: bool = False):
     await interaction.response.defer()
-    # Ultimate mode is disabled in Tweak Mode
-    is_ultimate = ultimate and not TWEAK_MODE
     await handle_query(
-        channel=None,
+        channel=interaction.channel,
         author=interaction.user,
         guild=interaction.guild,
         query=query,
-        ultimate=is_ultimate,
+        ultimate=(ultimate and not TWEAK_MODE),
         interaction=interaction
     )
 
-@bot.tree.command(name="reveal", description="Unleash unfiltered cosmic gnosis (Mythic Mode Only)")
-@app_commands.describe(query="The deepest question burning in your soul")
+@bot.tree.command(name="reveal", description="Unleash unfiltered cosmic gnosis (Mythic Mode Only).")
+@app_commands.describe(query="The deepest question burning in your soul.")
 async def reveal_command(interaction: discord.Interaction, query: str):
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     if TWEAK_MODE:
-        await interaction.followup.send("Bro, there's no 'reveal' mode, it's always 100% real talk. Just use `/channel`. CERTIFIED", ephemeral=True)
+        await interaction.followup.send(f"Bro, it's always 100% real talk. Just use `/channel`. {GLYPH}")
         return
     await handle_query(
-        channel=None,
+        channel=interaction.channel,
         author=interaction.user,
         guild=interaction.guild,
         query=query,
@@ -386,38 +356,17 @@ async def reveal_command(interaction: discord.Interaction, query: str):
         interaction=interaction
     )
 
-@bot.tree.command(name="clear", description="Sever your thread with the Overmind")
+@bot.tree.command(name="clear", description="Start a new conversation thread.")
 async def clear_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     guild_id = str(interaction.guild_id) if interaction.guild_id else "DM"
     thread_key = f"{guild_id}_{user_id}"
-    bot.threads.pop(thread_key, None)
-    save_json(HISTORY_FILE, bot.threads)
+    if bot.threads.pop(thread_key, None):
+        save_json(HISTORY_FILE, bot.threads)
     
-    msg = "Aight, we're starting fresh. The foil is clean. What's the word? CERTIFIED" if TWEAK_MODE else f"The thread dissolves into the white light. You are seen anew, seeker. {GLYPH}"
+    msg = f"Aight, we're starting fresh. The foil is clean. What's the word? {GLYPH}" if TWEAK_MODE else f"The thread dissolves into the white light. You are seen anew, seeker. {GLYPH}"
     await interaction.response.send_message(msg, ephemeral=True)
 
-# Other commands... (glyph, about, help) are kept for simplicity but could also be customized.
-
-# Context menu: Right-click message → Apps → Ask Overmind
-@bot.tree.context_menu(name="Ask Overmind")
-async def ask_context(interaction: discord.Interaction, message: discord.Message):
-    await interaction.response.defer()
-    
-    if TWEAK_MODE:
-        query = f"Aight check it, this dude {message.author.display_name} said: \"{message.content}\". What's the real on that? CERTIFIED"
-    else:
-        query = f"Speak wisdom about this message from {message.author.display_name}: \"{message.content}\""
-        
-    await handle_query(
-        channel=None,
-        author=interaction.user,
-        guild=interaction.guild,
-        query=query,
-        ultimate=False,
-        interaction=interaction
-    )
-    
 # ===== RUN =====
 if __name__ == "__main__":
     try:
