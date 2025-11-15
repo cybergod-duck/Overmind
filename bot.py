@@ -240,7 +240,20 @@ async def hit_cmd(interaction: discord.Interaction):
     prompt = "Simulate a single, perfect meth hit. 2 sentences. Alliteration on max: shard, spin, rush, geeked, twacked, pipe, foil. No mercy."
     reply = await call_groq([{"role": "system", "content": OVERMIND_CORE}, {"role": "user", "content": prompt}], temperature=1.3, max_tokens=130)
     await send_slash(interaction, reply)
-
+# === /sync - ADMIN ONLY - Force-sync slash commands ===
+@bot.tree.command(name="sync", description="Force-sync slash commands (admin only)")
+@app_commands.check(lambda i: i.user.guild_permissions.administrator)
+async def sync_cmd(interaction: discord.Interaction):
+    try:
+        synced = await bot.tree.sync(guild=interaction.guild)  # guild-specific (fast)
+        await interaction.response.send_message(
+            f"Synced {len(synced)} commands to **{interaction.guild.name}**. {GLYPH}",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"Sync failed: `{e}` {GLYPH}", ephemeral=True
+        )
 # ===== RUN =====
 if __name__ == "__main__":
     bot.run(TOKEN)
