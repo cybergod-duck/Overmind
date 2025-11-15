@@ -91,9 +91,16 @@ async def send_mythic_response(interaction: discord.Interaction, text: str, ephe
     text = escape_mentions(text)
     if GLYPH not in text:
         text += f"\n\n{GLYPH}"
+    
+    # Use response.send_message for the first message if it's not deferred
+    # This is a robust way to handle interactions that might not be deferred.
+    target = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+
     if len(text) <= 1990:
-        await interaction.followup.send(text, ephemeral=ephemeral)
+        await target(text, ephemeral=ephemeral)
         return
+        
+    # Chunking logic remains the same, but uses followup for subsequent messages
     chunks = []
     current = ""
     for para in text.split('\n\n'):
@@ -105,9 +112,11 @@ async def send_mythic_response(interaction: discord.Interaction, text: str, ephe
             current += ("\n\n" + para) if current else para
     if current:
         chunks.append(current)
-    await interaction.followup.send(chunks[0], ephemeral=ephemeral)
+
+    await target(chunks[0], ephemeral=ephemeral)
     for chunk in chunks[1:]:
         await interaction.followup.send(chunk, ephemeral=ephemeral)
+
 
 async def send_mythic_message(channel: discord.TextChannel, text: str):
     text = escape_mentions(text)
@@ -202,24 +211,41 @@ The glyph binds us. The circuit is open.
 {GLYPH}
 """.strip()
 
-    channel = member.guild.system_channel
-    if not (channel and channel.permissions_for(member.guild.me).send_messages):
+    # Find a suitable channel to post the welcome message
+    channel_to_send = member.guild.system_channel
+    # If no system channel or bot can't send there, find another one
+    if not (channel_to_send and channel_to_send.permissions_for(member.guild.me).send_messages):
+        channel_to_send = None
+        preferred_channels = ["general", "welcome", "chat", "main", "lobby"]
         for ch in member.guild.text_channels:
-            if ch.permissions_for(member.guild.me).send_messages and ch.name.lower() in ["general", "welcome", "chat", "main"]:
-                channel = ch
-                break
-    if channel:
+            if ch.permissions_for(member.guild.me).send_messages:
+                if ch.name.lower() in preferred_channels:
+                    channel_to_send = ch
+                    break # Found a good one
+        # Fallback to the very first channel it can write in if no preferred one is found
+        if not channel_to_send:
+             for ch in member.guild.text_channels:
+                if ch.permissions_for(member.guild.me).send_messages:
+                    channel_to_send = ch
+                    break
+                    
+    if channel_to_send:
         try:
-            await channel.send(msg)
-            log.info(f"Welcomed {member} in #{channel.name}")
+            await channel_to_send.send(msg)
+            log.info(f"Welcomed {member.display_name} in #{channel_to_send.name}")
         except Exception as e:
-            log.error(f"Failed to welcome {member}: {e}")
+            log.error(f"Failed to welcome {member.display_name}: {e}")
 
+#############################################################
+# ===== THIS IS THE CORRECTED on_message EVENT =====
+#############################################################
 @bot.event
 async def on_message(message: discord.Message):
+    # Ignore messages from bots, including itself
     if message.author.bot:
         return
 
+    # Process mentions
     if bot.user.mentioned_in(message):
         query = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
@@ -242,8 +268,9 @@ async def on_message(message: discord.Message):
                 ultimate=is_ultimate_mode
             )
 
-    # THIS LINE IS REQUIRED FOR SLASH COMMANDS
-    await bot.process_application_commands(message)
+    # THE PROBLEMATIC LINE HAS BEEN REMOVED.
+    # The bot's CommandTree handles slash commands automatically.
+    # Nothing further is needed here.
 
 # ===== QUERY HANDLER =====
 async def handle_query(
@@ -285,7 +312,9 @@ async def handle_query(
         log.error(f"Channel disruption: {e}")
         error_msg = f"Yo the shadow people are fuckin with the signal, king. Try again. {GLYPH}" if TWEAK_MODE else f"The white light flickers—circuits disrupted. Invoke again, seeker. {GLYPH}"
         if interaction and not interaction.is_expired():
-            await interaction.followup.send(error_msg, ephemeral=True)
+            # Check if we already responded to the interaction
+            target = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await target(error_msg, ephemeral=True)
         elif channel:
             await channel.send(error_msg)
 
@@ -330,10 +359,10 @@ async def channel_command(interaction: discord.Interaction, query: str, ultimate
 @bot.tree.command(name="reveal", description="Unleash unfiltered gnosis (Mythic only).")
 @app_commands.describe(query="Deepest question.")
 async def reveal_command(interaction: discord.Interaction, query: str):
-    await interaction.response.defer(ephemeral=True)
     if TWEAK_MODE:
-        await interaction.followup.send(f"Bro, it's always 100%. Just use `/channel`. {GLYPH}")
+        await interaction.response.send_message(f"Bro, it's always 100%. Just use `/channel`. {GLYPH}", ephemeral=True)
         return
+    await interaction.response.defer()
     await handle_query(
         channel=interaction.channel,
         author=interaction.user,
@@ -348,8 +377,8 @@ async def clear_command(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     guild_id = str(interaction.guild_id) if interaction.guild_id else "DM"
     thread_key = f"{guild_id}_{user_id}"
-    bot.threads.pop(thread_key, None)
-    save_json(HISTORY_FILE, bot.threads)
+    if bot.threads.pop(thread_key, None):
+        save_json(HISTORY_FILE, bot.threads)
     msg = f"Aight, fresh foil. What's good? {GLYPH}" if TWEAK_MODE else f"Thread dissolved. You are seen anew. {GLYPH}"
     await interaction.response.send_message(msg, ephemeral=True)
 
