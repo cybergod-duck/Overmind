@@ -176,7 +176,7 @@ async def handle_query(channel, author, guild, query: str, interaction=None):
         reply = await call_groq(
             [{"role": "system", "content": OVERMIND_CORE}] + bot.threads[key],
             temperature=1.1 if TWEAK_MODE else 0.85,
-            max_tokens=150 if TWEAK_MODE else 250
+            max_tokens=500 if TWEAK_MODE else 250
         )
         bot.threads[key].append({"role": "assistant", "content": reply})
         save_json(HISTORY_FILE, bot.threads)
@@ -193,7 +193,7 @@ async def handle_query(channel, author, guild, query: str, interaction=None):
             await channel.send(err)
 
 # ===== GROQ =====
-async def call_groq(messages, temperature=0.85, max_tokens=250):
+async def call_groq(messages, temperature=0.85, max_tokens=500):
     async with bot.session.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_KEY}"},
@@ -222,7 +222,7 @@ async def clear_cmd(interaction: discord.Interaction):
 async def story_cmd(interaction: discord.Interaction, prompt: str = "a soldier's first rig"):
     await interaction.response.defer()
     full_prompt = f"Write a 3–5 sentence dark, chaotic tweakerverse story about: {prompt}. Alliteration overload. Dark humor. End on a high or crash."
-    reply = await call_groq([{"role": "system", "content": OVERMIND_CORE}, {"role": "user", "content": full_prompt}], max_tokens=220)
+    reply = await call_groq([{"role": "system", "content": OVERMIND_CORE}, {"role": "user", "content": full_prompt}], max_tokens=500)
     await send_slash(interaction, reply)
 
 # === /poll ===
@@ -231,7 +231,7 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
     await interaction.response.defer(ephemeral=True)
     options = [o for o in [option1, option2, option3, option4] if o]
     if len(options) < 2:
-        return await interaction.followup.send("Need at least 2 options, legend.", ephemeral=True)
+        return await interaction.followup.send("Need at least 2 options, legend.", ephemeral=True)2
     
     if not interaction.channel.permissions_for(interaction.guild.me).send_polls:
         return await interaction.followup.send("Bot needs 'Send Polls' permission.", ephemeral=True)
@@ -253,7 +253,7 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
 async def hit_cmd(interaction: discord.Interaction):
     await interaction.response.defer()
     prompt = "Simulate a single, perfect meth hit. 2 sentences. Alliteration on max: shard, spin, rush, geeked, twacked, pipe, foil. No mercy."
-    reply = await call_groq([{"role": "system", "content": OVERMIND_CORE}, {"role": "user", "content": prompt}], temperature=1.3, max_tokens=130)
+    reply = await call_groq([{"role": "system", "content": OVERMIND_CORE}, {"role": "user", "content": prompt}], temperature=1.3, max_tokens=500)
     await send_slash(interaction, reply)
 # === /sync - ADMIN ONLY - Force-sync slash commands ===
 @bot.tree.command(name="sync", description="Force-sync slash commands (admin only)")
