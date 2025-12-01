@@ -107,10 +107,11 @@ TRIGGER_WORDS = ["shard", "pipe", "meth", "geeked", "twacked", "spin", "rig", "f
 
 @bot.event
 async def on_message(message: discord.Message):
+    # 1. Ignore input from other bots or ourself
     if message.author.bot:
         return
 
-    # Chaotic keyword reaction (30% chance)
+    # 2. Chaotic keyword reaction (30% chance)
     if any(word in message.content.lower() for word in TRIGGER_WORDS) and random.random() < 0.30:
         try:
             quick = await call_groq([
@@ -119,16 +120,14 @@ async def on_message(message: discord.Message):
             ], max_tokens=80, temperature=1.4)
             await message.reply(quick + f" {GLYPH}")
         except:
-            pass  # silent if rate-limited
+            pass 
 
-    # === MENTION HANDLING (THE FIXED PART) ===
+    # 3. MENTION HANDLING (Fixed)
     if bot.user in message.mentions:
-        # Properly strip both <@id> and <@!id> formats
+        # Clean the query by removing the <@ID> format specifically
         query = message.content
-        for mention in message.mentions:
-            if mention == bot.user:
-                query = query.replace(str(mention), "").strip()
-                break
+        # Remove <@123> and <@!123> (nickname style) mentions
+        query = query.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
 
         if not query:
             await message.channel.send(f"Speak, fiend. {GLYPH}")
@@ -137,7 +136,8 @@ async def on_message(message: discord.Message):
         async with message.channel.typing():
             await handle_query(message.channel, message.author, message.guild, query)
 
-    await bot.process_application_commands(message)
+    # REMOVED: await bot.process_application_commands(message) 
+    # (This method does not exist on discord.Client and was crashing your bot)
 
 # ===== CORE QUERY HANDLER =====
 async def handle_query(channel, author, guild, query: str, interaction=None):
