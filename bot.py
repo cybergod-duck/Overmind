@@ -15,8 +15,9 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 HISTORY_FILE = 'overmind_threads.json'
 MAX_HISTORY = 12
-# Switched to the stable model to prevent random crashes
-DEFAULT_MODEL = "llama-3.1-8b-instant" 
+
+# This is the fast, cheap model that works best
+DEFAULT_MODEL = "llama-3.1-8b-instant"
 
 if not TOKEN or not GROQ_KEY:
     raise RuntimeError("DISCORD_TOKEN and GROQ_API_KEY must be set in .env")
@@ -177,7 +178,7 @@ async def call_groq(messages, temperature=1.0, max_tokens=1024):
     if max_tokens > 4096: max_tokens = 4096
 
     payload = {
-        "": DEFAULT_,
+        "model": DEFAULT_MODEL,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens
