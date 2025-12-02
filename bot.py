@@ -16,7 +16,7 @@ GROQ_KEY = os.getenv('GROQ_API_KEY')
 HISTORY_FILE = 'overmind_threads.json'
 MAX_HISTORY = 12
 # Switched to the stable model to prevent random crashes
-DEFAULT_MODEL = "llama3-70b-8192" 
+DEFAULT_MODEL = "llama-3.1-8b-instant" 
 
 if not TOKEN or not GROQ_KEY:
     raise RuntimeError("DISCORD_TOKEN and GROQ_API_KEY must be set in .env")
