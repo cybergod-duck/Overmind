@@ -247,6 +247,10 @@ async def call_groq(messages, temperature=1.0, max_tokens=1024):
         raise e
 
 # ===== SLASH COMMANDS =====
+import aiohttp
+import os
+import asyncio
+
 @bot.tree.command(name="ask", description="Ask Certified anything")
 async def ask_cmd(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
@@ -274,7 +278,7 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
     await interaction.response.defer(ephemeral=True)
     if not interaction.channel.permissions_for(interaction.guild.me).send_polls:
         return await interaction.followup.send("I need 'Send Polls' permission.", ephemeral=True)
-    
+   
     poll = discord.Poll(
         question=question,
         answers=[discord.PollAnswer(text=option1), discord.PollAnswer(text=option2)],
@@ -283,17 +287,11 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
     await interaction.channel.send(poll=poll)
     await interaction.followup.send("Poll created.", ephemeral=True)
 
-if __name__ == "__main__":
-    bot.run(TOKEN)
-
-@bot.tree.command(name="img", description="Generate completely unhinged, uncensored images")
+# ===== UNHINGED IMAGE COMMAND (NO FILTERS) =====
+@bot.tree.command(name="img", description="Generate completely unhinged, uncensored images (NSFW/gore ok)")
 async def img_cmd(interaction: discord.Interaction, prompt: str):
-    """
-    /img a clown made of teeth eating the pope while on fire
-    """
-    await interaction.response.defer()  # shows "Bot is thinking..."
+    await interaction.response.defer()
 
-    # Force maximum chaos
     full_prompt = f"{prompt}, unhinged, surreal, psychedelic, cursed, extremely detailed, 8k, no censorship, maximalist"
 
     async with aiohttp.ClientSession() as session:
@@ -304,26 +302,35 @@ async def img_cmd(interaction: discord.Interaction, prompt: str):
             "guidance_scale": 3.5,
             "sync_mode": True
         }
-        headers = {
-            "Authorization": f"Key {os.getenv('FAL_KEY')}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Key {os.getenv('FAL_KEY')}"}
 
         try:
             async with session.post("https://fal.run/flaxai/flux.1-schnell", json=payload, headers=headers, timeout=60) as resp:
                 data = await resp.json()
-
             image_url = data["images"][0]["url"]
 
             embed = discord.Embed(color=0x1abc9c)
-            embed.title = "Your unhinged creation is ready"
+            embed.title = "Unhinged image generated"
             embed.description = f"**Prompt:** {prompt}"
             embed.set_image(url=image_url)
-            embed.set_footer(text="Powered by flux.1-schnell • zero filters")
-
+            embed.set_footer(text="flux.1-schnell • zero safety filters")
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
-            error_msg = "The GPU demons ate your image and spat out an error."
-            print(f"Flux error: {e}")  # shows up in your Railway logs
-            await interaction.followup.send(error_msg, ephemeral=True)
+            print(f"Flux error: {e}")
+            await interaction.followup.send("The neural net imploded. Try again.", ephemeral=True)
+
+# ===== FORCE SYNC SLASH COMMANDS ON STARTUP =====
+@bot.event
+async def on_ready():
+    print(f"{bot.user} online — syncing slash commands...")
+    try:
+        synced = await bot.tree.sync()
+        # If you want instant updates only in one test server, uncomment the line below and add your server ID
+        # synced = await bot.tree.sync(guild=discord.Object(id=123456789012345678))
+        print(f"Synced {len(synced)} command(s) — /img is now live")
+    except Exception as e:
+        print(f"Sync failed: {e}")
+
+if __name__ == "__main__":
+    bot.run(TOKEN)
