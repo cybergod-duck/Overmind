@@ -32,45 +32,34 @@ async def on_ready():
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
 
 # ======================= IMG — FIXED ENDPOINT =======================
-@tree.command(name="img", description="Generate uncensored image")
+@tree.command(name="img", description="NSFW god-tier image (SinkIn)")
 async def img(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
 
-    if not FAL_KEY:
-        await interaction.followup.send("FAL_KEY missing", ephemeral=True)
-        return
-
-    payload = {
-        "prompt": f"{prompt}, ultra detailed, cinematic, 8k",
-        "image_size": {"width": 1024, "height": 1024},
-        "num_inference_steps": 28,
-        "guidance_scale": 3.5,
-        "enable_safety_checker": False
-    }
-
     try:
         async with session.post(
-            "https://fal.run/fal-ai/flux/dev",  # ← CORRECT 2025 ENDPOINT
-            json=payload,
-            headers={"Authorization": f"Key {FAL_KEY}"},
-            timeout=120
+            "https://sinkin.ai/m/v1/sd_xl",
+            json={
+                "prompt": f"{prompt}, masterpiece, best quality, ultra-detailed, beautiful face, perfect body, nsfw",
+                "negative_prompt": "blurry, ugly, deformed, censorship",
+                "width": 1024,
+                "height": 1024,
+                "num_inference_steps": 30,
+                "guidance_scale": 7.5
+            },
+            timeout=180
         ) as r:
-            if r.status != 200:
-                text = await r.text()
-                raise Exception(f"FAL {r.status}: {text[:100]}")
             data = await r.json()
 
-        url = data["images"][0]["url"]
+        url = data["images"][0]
         embed = discord.Embed(color=0x1abc9c)
         embed.title = "generated •"
-        embed.description = f"*{prompt}*"
         embed.set_image(url=url)
-        embed.set_footer(text="flux/dev • uncensored")
+        embed.set_footer(text="SinkIn XL • full nsfw")
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(f"failed: {str(e)[:200]}", ephemeral=True)
-
+        await interaction.followup.send("sinkin died • try again", ephemeral=True)
 # ======================= ASK =======================
 @tree.command(name="ask", description="Ask me anything")
 async def ask(interaction: discord.Interaction, query: str):
