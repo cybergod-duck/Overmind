@@ -37,7 +37,6 @@ async def on_ready():
 # ======================= IMG COMMAND (WORKS 100%) =======================
 @tree.command(name="img", description="Generate an image — no limits")
 async def img(interaction: discord.Interaction, prompt: str):
-    # THIS LINE IS THE ONLY THING THAT MATTERS — MUST BE FIRST
     await interaction.response.defer(thinking=True)
 
     if not FAL_KEY:
@@ -56,7 +55,7 @@ async def img(interaction: discord.Interaction, prompt: str):
         async with session.post(
             "https://fal.run/fal-ai/flux-dev",
             json=payload,
-            headers={"Authorization": f"Bearer {FAL_KEY}"},
+            headers={"Authorization": f"Key {FAL_KEY}"},  # ← THIS IS THE EXACT FIX
             timeout=120
         ) as r:
             data = await r.json()
@@ -70,7 +69,7 @@ async def img(interaction: discord.Interaction, prompt: str):
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send("image failed • try again", ephemeral=True)
+        await interaction.followup.send(f"still failed: {str(e)[:100]}", ephemeral=True)  # Better error
 
 # ======================= ASK COMMAND =======================
 @tree.command(name="ask", description="Ask me anything")
