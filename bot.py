@@ -283,3 +283,37 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
 
 if __name__ == "__main__":
     bot.run(TOKEN)
+
+// === UNHINGED IMAGE COMMAND START ===
+const axios = require('axios');
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.toLowerCase().startsWith('!ai ')) return;
+
+  let prompt = message.content.slice(4).trim();
+  if (!prompt) prompt = "total unhinged chaos";
+
+  const msg = await message.reply("generating nightmare fuel...");
+
+  try {
+    const response = await axios.post('https://fal.run/flaxai/flux.1-schnell', {
+      prompt: prompt + ", extremely surreal, unhinged, psychedelic, cursed, 8k",
+      image_size: "square_hd",
+      num_inference_steps: 4,
+      sync_mode: true
+    }, {
+      headers: { Authorization: `Key ${process.env.FAL_KEY}` }
+    });
+
+    const image = response.data.images[0].url;
+
+    await msg.edit({
+      content: `**${message.author.username} asked for:** ${prompt}`,
+      files: [image]
+    });
+  } catch (e) {
+    msg.edit("the AI refused to witness what you asked for");
+  }
+});
+// === UNHINGED IMAGE COMMAND END ===
