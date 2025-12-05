@@ -65,15 +65,14 @@ async def on_ready():
     log.info(f"{bot.user} is online and ready!")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
     
-    # ←←← PUT YOUR SERVER ID HERE (right-click server icon → Copy Server ID) ←←←
-    MY_SERVER_ID = 1293478912345678901   # ← replace with your actual server ID
-
+    # Your server only — instant slash commands
     try:
-        synced = await bot.tree.sync(guild=discord.Object(id=MY_SERVER_ID))
-        log.info(f"Guild-only sync complete — {len(synced)} commands are now LIVE in your server")
-        print("SLASH COMMANDS ARE LIVE RIGHT NOW IN YOUR SERVER")
+        synced = await bot.tree.sync(guild=discord.Object(id=1139997451835674667))
+        log.info(f"Guild sync complete → {len(synced)} commands LIVE in Certified server")
+        print("SLASH COMMANDS ARE LIVE RIGHT NOW — /img is waiting for you")
     except Exception as e:
         log.error(f"Sync failed: {e}")
+        print("If you see this, double-check the ID or bot permissions")
 
 # ========================= GROQ CALL =========================
 async def call_groq(messages, temperature=1.0, max_tokens=1024):
