@@ -32,34 +32,36 @@ async def on_ready():
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
 
 # ======================= IMG — FIXED ENDPOINT =======================
-@tree.command(name="img", description="NSFW god-tier image (SinkIn)")
+@tree.command(name="img", description="NSFW god-tier — no key needed")
 async def img(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
 
     try:
         async with session.post(
-            "https://sinkin.ai/m/v1/sd_xl",
+            "https://api.together.xyz/v1/images/generations",
             json={
-                "prompt": f"{prompt}, masterpiece, best quality, ultra-detailed, beautiful face, perfect body, nsfw",
-                "negative_prompt": "blurry, ugly, deformed, censorship",
+                "model": "black-forest-labs/flux-1-dev",
+                "prompt": f"{prompt}, ultra detailed, beautiful face, perfect body, nsfw, 8k",
+                "negative_prompt": "blurry, ugly, deformed, censored",
                 "width": 1024,
                 "height": 1024,
-                "num_inference_steps": 30,
-                "guidance_scale": 7.5
+                "steps": 28,
+                "seed": 42
             },
-            timeout=180
+            headers={"Authorization": "Bearer no-key-needed"},
+            timeout=120
         ) as r:
             data = await r.json()
 
-        url = data["images"][0]
+        url = data["data"][0]["url"]
         embed = discord.Embed(color=0x1abc9c)
         embed.title = "generated •"
         embed.set_image(url=url)
-        embed.set_footer(text="SinkIn XL • full nsfw")
+        embed.set_footer(text="flux-1-dev @ together.xyz • zero keys")
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send("sinkin died • try again", ephemeral=True)
+        await interaction.followup.send("flux hiccup • try again", ephemeral=True)
 # ======================= ASK =======================
 @tree.command(name="ask", description="Ask me anything")
 async def ask(interaction: discord.Interaction, query: str):
