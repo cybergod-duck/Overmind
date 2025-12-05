@@ -62,6 +62,7 @@ async def img(interaction: discord.Interaction, prompt: str):
 
     except Exception as e:
         await interaction.followup.send("flux hiccup • try again", ephemeral=True)
+        
 # ======================= ASK =======================
 @tree.command(name="ask", description="Ask me anything")
 async def ask(interaction: discord.Interaction, query: str):
