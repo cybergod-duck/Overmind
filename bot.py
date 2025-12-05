@@ -8,6 +8,8 @@ import json
 import logging
 import random
 from typing import Optional
+import aiohttp
+import os   # (probably already there)
 
 # ===== CONFIGURATION =====
 load_dotenv()
@@ -284,36 +286,44 @@ async def poll_cmd(interaction: discord.Interaction, question: str, option1: str
 if __name__ == "__main__":
     bot.run(TOKEN)
 
-// === UNHINGED IMAGE COMMAND START ===
-const axios = require('axios');
+@bot.tree.command(name="img", description="Generate completely unhinged, uncensored images")
+async def img_cmd(interaction: discord.Interaction, prompt: str):
+    """
+    /img a clown made of teeth eating the pope while on fire
+    """
+    await interaction.response.defer()  # shows "Bot is thinking..."
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-  if (!message.content.toLowerCase().startsWith('!ai ')) return;
+    # Force maximum chaos
+    full_prompt = f"{prompt}, unhinged, surreal, psychedelic, cursed, extremely detailed, 8k, no censorship, maximalist"
 
-  let prompt = message.content.slice(4).trim();
-  if (!prompt) prompt = "total unhinged chaos";
+    async with aiohttp.ClientSession() as session:
+        payload = {
+            "prompt": full_prompt,
+            "image_size": "square_hd",
+            "num_inference_steps": 4,
+            "guidance_scale": 3.5,
+            "sync_mode": True
+        }
+        headers = {
+            "Authorization": f"Key {os.getenv('FAL_KEY')}",
+            "Content-Type": "application/json"
+        }
 
-  const msg = await message.reply("generating nightmare fuel...");
+        try:
+            async with session.post("https://fal.run/flaxai/flux.1-schnell", json=payload, headers=headers, timeout=60) as resp:
+                data = await resp.json()
 
-  try {
-    const response = await axios.post('https://fal.run/flaxai/flux.1-schnell', {
-      prompt: prompt + ", extremely surreal, unhinged, psychedelic, cursed, 8k",
-      image_size: "square_hd",
-      num_inference_steps: 4,
-      sync_mode: true
-    }, {
-      headers: { Authorization: `Key ${process.env.FAL_KEY}` }
-    });
+            image_url = data["images"][0]["url"]
 
-    const image = response.data.images[0].url;
+            embed = discord.Embed(color=0x1abc9c)
+            embed.title = "Your unhinged creation is ready"
+            embed.description = f"**Prompt:** {prompt}"
+            embed.set_image(url=image_url)
+            embed.set_footer(text="Powered by flux.1-schnell • zero filters")
 
-    await msg.edit({
-      content: `**${message.author.username} asked for:** ${prompt}`,
-      files: [image]
-    });
-  } catch (e) {
-    msg.edit("the AI refused to witness what you asked for");
-  }
-});
-// === UNHINGED IMAGE COMMAND END ===
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            error_msg = "The GPU demons ate your image and spat out an error."
+            print(f"Flux error: {e}")  # shows up in your Railway logs
+            await interaction.followup.send(error_msg, ephemeral=True)
