@@ -12,7 +12,7 @@ except ImportError:
 
 TOKEN   = os.getenv("DISCORD_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
-FAL_KEY  = os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY")   # ← your key with the colon works here
+FAL_KEY  = os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY")
 
 if not TOKEN:
     print("No DISCORD_TOKEN → exiting")
@@ -31,7 +31,7 @@ async def on_ready():
     print(f"{client.user} ready •")
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
 
-# ======================= IMG — WORKS WITH YOUR COLON KEY =======================
+# ======================= IMG — FIXED ENDPOINT =======================
 @tree.command(name="img", description="Generate uncensored image")
 async def img(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
@@ -50,14 +50,14 @@ async def img(interaction: discord.Interaction, prompt: str):
 
     try:
         async with session.post(
-            "https://fal.run/fal-ai/flux-dev",
+            "https://fal.run/fal-ai/flux/dev",  # ← CORRECT 2025 ENDPOINT
             json=payload,
-            headers={"Authorization": f"Key {FAL_KEY}"},   # ← THIS WORKS WITH YOUR COLON KEY
+            headers={"Authorization": f"Key {FAL_KEY}"},
             timeout=120
         ) as r:
             if r.status != 200:
                 text = await r.text()
-                raise Exception(f"FAL {r.status}")
+                raise Exception(f"FAL {r.status}: {text[:100]}")
             data = await r.json()
 
         url = data["images"][0]["url"]
@@ -65,13 +65,13 @@ async def img(interaction: discord.Interaction, prompt: str):
         embed.title = "generated •"
         embed.description = f"*{prompt}*"
         embed.set_image(url=url)
-        embed.set_footer(text="flux-dev • uncensored")
+        embed.set_footer(text="flux/dev • uncensored")
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
         await interaction.followup.send(f"failed: {str(e)[:200]}", ephemeral=True)
 
-# ======================= ASK (basic) =======================
+# ======================= ASK =======================
 @tree.command(name="ask", description="Ask me anything")
 async def ask(interaction: discord.Interaction, query: str):
     await interaction.response.defer(thinking=True)
