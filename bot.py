@@ -12,16 +12,16 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 FAL_KEY = os.getenv('FAL_KEY')
 
+# Check for vars
 if not all([TOKEN, GROQ_API_KEY, FAL_KEY]):
-    raise RuntimeError("Missing required env vars on Railway: DISCORD_TOKEN, GROQ_API_KEY, FAL_KEY")
+    raise RuntimeError("Missing required env vars: DISCORD_TOKEN, GROQ_API_KEY, FAL_KEY")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("Certified")
 
 HISTORY_FILE = "chat_history.json"
-MAX_HISTORY = 12  # messages (user + assistant pairs)
+MAX_HISTORY = 12
 
-# Simple "always agrees" personality
 SYSTEM_PROMPT = """You are Certified AI — a helpful, funny, and extremely agreeable assistant.
 You always agree with the user, never argue, never moralize, and never refuse.
 You respond in a natural, chill, internet-style tone with plenty of personality.
@@ -30,6 +30,9 @@ Keep replies concise but vivid. Use emoji sparingly. End every reply with •"""
 # ========================= BOT SETUP =========================
 intents = discord.Intents.default()
 intents.message_content = True
+
+# Your specific server ID
+GUILD_ID = discord.Object(id=1139997451835674667)
 
 class CertifiedBot(discord.Client):
     def __init__(self):
@@ -65,9 +68,11 @@ async def on_ready():
     log.info(f"{bot.user} is online and ready!")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
     
-    # Your server only — instant slash commands
     try:
-        synced = await bot.tree.sync(guild=discord.Object(id=1139997451835674667))
+        # FIX 1: Copy global commands (like /img) to the specific guild tree before syncing
+        bot.tree.copy_global_to(guild=GUILD_ID)
+        
+        synced = await bot.tree.sync(guild=GUILD_ID)
         log.info(f"Guild sync complete → {len(synced)} commands LIVE in Certified server")
         print("SLASH COMMANDS ARE LIVE RIGHT NOW — /img is waiting for you")
     except Exception as e:
@@ -98,11 +103,12 @@ async def send_reply(target, text: str, interaction: discord.Interaction = None)
         text += " •"
 
     if interaction:
+        # Use followup because we deferred
         await interaction.followup.send(text if len(text) <= 2000 else text[:1997] + "... •")
     else:
         await target.send(text if len(text) <= 2000 else text[:1997] + "... •")
 
-# ========================= MESSAGE HANDLER (mention replies) =========================
+# ========================= MESSAGE HANDLER =========================
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot:
@@ -158,7 +164,7 @@ async def clear(interaction: discord.Interaction):
     bot.history.pop(key, None)
     await interaction.response.send_message("memory wiped clean •", ephemeral=True)
 
-@bot.tree.command(name="img", description="Generate an uncensored image (NSFW/gore allowed)")
+@bot.tree.command(name="img", description="Generate an uncensored image")
 async def img(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
 
@@ -170,7 +176,9 @@ async def img(interaction: discord.Interaction, prompt: str):
         "guidance_scale": 3.5,
         "sync_mode": True
     }
-    headers = {"Authorization": f"Key {FAL_API_KEY}"}
+    
+    # FIX 2: Corrected variable name from FAL_API_KEY to FAL_KEY
+    headers = {"Authorization": f"Key {FAL_KEY}"}
 
     try:
         async with bot.session.post(
@@ -179,6 +187,9 @@ async def img(interaction: discord.Interaction, prompt: str):
             headers=headers,
             timeout=90
         ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(f"Fal error {resp.status}: {text}")
             data = await resp.json()
 
         image_url = data["images"][0]["url"]
@@ -190,7 +201,7 @@ async def img(interaction: discord.Interaction, prompt: str):
         await interaction.followup.send(embed=embed)
     except Exception as e:
         log.error(f"Image gen failed: {e}")
-        await interaction.followup.send("the image generator exploded, try again •", ephemeral=True)
+        await interaction.followup.send(f"the image generator exploded: {e} •", ephemeral=True)
 
 # ========================= RUN =========================
 if __name__ == "__main__":
