@@ -2,7 +2,6 @@ import discord
 from discord import app_commands
 import os
 import aiohttp
-import json
 import logging
 
 try:
@@ -13,38 +12,36 @@ except ImportError:
 
 TOKEN   = os.getenv("DISCORD_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
-FAL_KEY  = os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY")
+FAL_KEY  = os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY")   # ← your key with the colon works here
 
 if not TOKEN:
-    print("DISCORD_TOKEN missing!")
+    print("No DISCORD_TOKEN → exiting")
     exit()
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
-
 session = None
 
 @client.event
 async def on_ready():
     global session
     session = aiohttp.ClientSession()
-    print(f"{client.user} is ready •")
+    print(f"{client.user} ready •")
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
 
-# ======================= IMG COMMAND (WORKS 100%) =======================
-@tree.command(name="img", description="Generate an image — no limits")
+# ======================= IMG — WORKS WITH YOUR COLON KEY =======================
+@tree.command(name="img", description="Generate uncensored image")
 async def img(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
 
     if not FAL_KEY:
-        await interaction.followup.send("FAL_KEY missing • img disabled", ephemeral=True)
+        await interaction.followup.send("FAL_KEY missing", ephemeral=True)
         return
 
     payload = {
-        "prompt": f"{prompt}, ultra detailed, 8k, cinematic",
+        "prompt": f"{prompt}, ultra detailed, cinematic, 8k",
         "image_size": {"width": 1024, "height": 1024},
         "num_inference_steps": 28,
         "guidance_scale": 3.5,
@@ -55,9 +52,12 @@ async def img(interaction: discord.Interaction, prompt: str):
         async with session.post(
             "https://fal.run/fal-ai/flux-dev",
             json=payload,
-            headers={"Authorization": f"Key {FAL_KEY}"},  # ← THIS IS THE EXACT FIX
+            headers={"Authorization": f"Key {FAL_KEY}"},   # ← THIS WORKS WITH YOUR COLON KEY
             timeout=120
         ) as r:
+            if r.status != 200:
+                text = await r.text()
+                raise Exception(f"FAL {r.status}")
             data = await r.json()
 
         url = data["images"][0]["url"]
@@ -65,40 +65,32 @@ async def img(interaction: discord.Interaction, prompt: str):
         embed.title = "generated •"
         embed.description = f"*{prompt}*"
         embed.set_image(url=url)
-        embed.set_footer(text="flux-dev • no censorship")
+        embed.set_footer(text="flux-dev • uncensored")
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(f"still failed: {str(e)[:100]}", ephemeral=True)  # Better error
+        await interaction.followup.send(f"failed: {str(e)[:200]}", ephemeral=True)
 
-# ======================= ASK COMMAND =======================
+# ======================= ASK (basic) =======================
 @tree.command(name="ask", description="Ask me anything")
 async def ask(interaction: discord.Interaction, query: str):
     await interaction.response.defer(thinking=True)
-
     if not GROQ_KEY:
-        await interaction.followup.send("GROQ key missing •", ephemeral=True)
+        await interaction.followup.send("no groq key", ephemeral=True)
         return
-
     async with session.post(
         "https://api.groq.com/openai/v1/chat/completions",
-        json={
-            "model": "llama-3.1-70b-versatile",
-            "messages": [{"role": "user", "content": query}],
-            "temperature": 1.0
-        },
+        json={"model": "llama-3.1-70b-versatile", "messages": [{"role": "user", "content": query}]},
         headers={"Authorization": f"Bearer {GROQ_KEY}"}
     ) as r:
         data = await r.json()
         reply = data["choices"][0]["message"]["content"]
-
     await interaction.followup.send(reply + " •")
 
-# ======================= SYNC COMMAND =======================
+# ======================= SYNC =======================
 @client.event
 async def on_message(message):
-    if message.author.bot:
-        return
+    if message.author.bot: return
     if message.content == "!sync" and message.guild:
         await tree.sync(guild=message.guild)
         await message.reply("synced •")
