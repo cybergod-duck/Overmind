@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.utils import escape_mentions
-from dotenv import load_dotenv
 import os
 import aiohttp
 import json
@@ -9,13 +8,12 @@ import logging
 from typing import Optional
 
 # ========================= CONFIG =========================
-load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-FAL_API_KEY = os.getenv('FAL_KEY')  # for /img
+FAL_KEY = os.getenv('FAL_KEY')
 
-if not TOKEN or not GROQ_API_KEY or not FAL_API_KEY:
-    raise RuntimeError("Missing DISCORD_TOKEN, GROQ_API_KEY or FAL_KEY in .env")
+if not all([TOKEN, GROQ_API_KEY, FAL_KEY]):
+    raise RuntimeError("Missing required env vars on Railway: DISCORD_TOKEN, GROQ_API_KEY, FAL_KEY")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("Certified")
