@@ -74,9 +74,9 @@ bot = CertifiedBot()
 # ========================= READY & SYNC =========================
 @bot.event
 async def on_ready():
-    log.info(f"{bot.user} is certified and online")
+    log.info(f"{bot.user} is online")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
-    print("Bot ready • Use !sync in a server if commands don't show up")
+    print("Bot is running • Use !sync if commands don’t appear")
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -116,7 +116,7 @@ async def on_message(message: discord.Message):
                 bot.history[key].append({"role": "assistant", "content": reply})
                 await send_reply(message.channel, reply)
             except:
-                await message.reply("brain 500 • try again")
+                await message.reply("brain lagged • try again")
 
 # ========================= GROQ =========================
 async def call_groq(messages):
@@ -152,10 +152,11 @@ async def send_reply(target, text: str, interaction: discord.Interaction = None)
 
 @bot.tree.command(name="ask", description="Ask Certified anything")
 async def ask(interaction: discord.Interaction, query: str):
+    await interaction.response.defer(thinking=True)   # ← FIRST LINE, ALWAYS
+
     if not GROQ_API_KEY:
-        await interaction.response.send_message("brain key missing •", ephemeral=True)
+        await interaction.followup.send("brain key missing • tell the owner", ephemeral=True)
         return
-    await interaction.response.defer(thinking=True)
 
     key = f"{interaction.guild_id or 'DM'}_{interaction.user.id}"
     bot.history.setdefault(key, [])
@@ -175,16 +176,15 @@ async def clear(interaction: discord.Interaction):
     bot.history.pop(key, None)
     await interaction.response.send_message("memory wiped •", ephemeral=True)
 
-# ONLY ONE /img COMMAND — fully working Dec 2025
 @bot.tree.command(name="img", description="Generate an uncensored image")
 @app_commands.describe(prompt="What you want to see — no limits")
 @app_commands.cooldown(1, 25, app_commands.BucketType.user)
 async def img(interaction: discord.Interaction, prompt: str):
-    if not FAL_KEY:
-        await interaction.response.send_message("FAL_KEY missing • img disabled", ephemeral=True)
-        return
+    await interaction.response.defer(thinking=True)   # ← FIRST LINE, ALWAYS
 
-    await interaction.response.defer(thinking=True)  # fixes "application did not respond"
+    if not FAL_KEY:
+        await interaction.followup.send("FAL_KEY missing • image gen disabled", ephemeral=True)
+        return
 
     payload = {
         "prompt": f"{prompt}, ultra detailed, cinematic masterpiece, 8k",
@@ -194,7 +194,7 @@ async def img(interaction: discord.Interaction, prompt: str):
         "enable_safety_checker": False
     }
     headers = {
-        "Authorization": f"Bearer {FAL_KEY}",   # correct 2025 format
+        "Authorization": f"Bearer {FAL_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -207,7 +207,7 @@ async def img(interaction: discord.Interaction, prompt: str):
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                raise Exception(f"FAL {resp.status}")
+                raise Exception(f"FAL error {resp.status}")
             data = await resp.json()
 
         image_url = data["images"][0]["url"]
@@ -215,12 +215,12 @@ async def img(interaction: discord.Interaction, prompt: str):
         embed.title = "generated •"
         embed.description = f"*{prompt}*"
         embed.set_image(url=image_url)
-        embed.set_footer(text="flux-dev • zero censorship")
+        embed.set_footer(text="flux-dev • no limits")
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        log.error(f"IMG error: {e}")
-        await interaction.followup.send(f"generation failed: {str(e)[:400]} •", ephemeral=True)
+        log.error(f"IMG failed: {e}")
+        await interaction.followup.send("generation failed • try again later", ephemeral=True)
 
 # ========================= RUN =========================
 if __name__ == "__main__":
