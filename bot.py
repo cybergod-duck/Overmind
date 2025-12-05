@@ -12,12 +12,16 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 FAL_KEY = os.getenv('FAL_KEY')
 
-# Check for vars
-if not all([TOKEN, GROQ_API_KEY, FAL_KEY]):
-    raise RuntimeError("Missing required env vars: DISCORD_TOKEN, GROQ_API_KEY, FAL_KEY")
-
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("Certified")
+
+# SAFETY CHECK: Don't crash, just warn if keys are missing
+if not TOKEN:
+    log.error("CRITICAL: DISCORD_TOKEN is missing! Bot cannot start.")
+if not GROQ_API_KEY:
+    log.warning("GROQ_API_KEY is missing. Chatting won't work.")
+if not FAL_KEY:
+    log.warning("FAL_KEY is missing. /img command won't work.")
 
 HISTORY_FILE = "chat_history.json"
 MAX_HISTORY = 12
@@ -31,9 +35,6 @@ Keep replies concise but vivid. Use emoji sparingly. End every reply with •"""
 intents = discord.Intents.default()
 intents.message_content = True
 
-# Your specific server ID
-GUILD_ID = discord.Object(id=1139997451835674667)
-
 class CertifiedBot(discord.Client):
     def __init__(self):
         super().__init__(intents=intents)
@@ -43,8 +44,11 @@ class CertifiedBot(discord.Client):
 
     def load_history(self) -> dict:
         if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except:
+                return {}
         return {}
 
     def save_history(self):
@@ -67,17 +71,56 @@ bot = CertifiedBot()
 async def on_ready():
     log.info(f"{bot.user} is online and ready!")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you •"))
-    
-    try:
-        # FIX 1: Copy global commands (like /img) to the specific guild tree before syncing
-        bot.tree.copy_global_to(guild=GUILD_ID)
-        
-        synced = await bot.tree.sync(guild=GUILD_ID)
-        log.info(f"Guild sync complete → {len(synced)} commands LIVE in Certified server")
-        print("SLASH COMMANDS ARE LIVE RIGHT NOW — /img is waiting for you")
-    except Exception as e:
-        log.error(f"Sync failed: {e}")
-        print("If you see this, double-check the ID or bot permissions")
+    print("------------------------------------------------------")
+    print("If commands are missing, type '!sync' in your Discord server!")
+    print("------------------------------------------------------")
+
+# ========================= MAGIC SYNC COMMAND =========================
+@bot.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+
+    # 1. MAGIC SYNC COMMAND: Type !sync to force commands to appear
+    if message.content == "!sync" and message.guild:
+        await message.channel.typing()
+        try:
+            bot.tree.copy_global_to(guild=message.guild)
+            synced = await bot.tree.sync(guild=message.guild)
+            await message.reply(f"Synced {len(synced)} commands to this server! Check for /img now •")
+            log.info(f"Commands synced to {message.guild.name}")
+        except Exception as e:
+            await message.reply(f"Sync failed: {e} •")
+        return
+
+    # 2. MENTION HANDLING (Chat)
+    if bot.user in message.mentions:
+        if not GROQ_API_KEY:
+            await message.reply("my brain key (GROQ_API_KEY) is missing, I can't think •")
+            return
+
+        query = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        if not query:
+            await message.reply("yo say something •")
+            return
+
+        async with message.channel.typing():
+            key = f"{message.guild.id if message.guild else 'DM'}_{message.author.id}"
+            if key not in bot.history:
+                bot.history[key] = []
+
+            bot.history[key].append({"role": "user", "content": query})
+            bot.history[key] = bot.history[key][-MAX_HISTORY:]
+
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}] + bot.history[key]
+
+            try:
+                reply = await call_groq(messages)
+                bot.history[key].append({"role": "assistant", "content": reply})
+                await send_reply(message.channel, reply)
+            except Exception as e:
+                log.error(f"Groq failed: {e}")
+                await message.reply("my brain lagged out, try again •")
 
 # ========================= GROQ CALL =========================
 async def call_groq(messages, temperature=1.0, max_tokens=1024):
@@ -103,44 +146,18 @@ async def send_reply(target, text: str, interaction: discord.Interaction = None)
         text += " •"
 
     if interaction:
-        # Use followup because we deferred
         await interaction.followup.send(text if len(text) <= 2000 else text[:1997] + "... •")
     else:
         await target.send(text if len(text) <= 2000 else text[:1997] + "... •")
-
-# ========================= MESSAGE HANDLER =========================
-@bot.event
-async def on_message(message: discord.Message):
-    if message.author.bot:
-        return
-    if bot.user in message.mentions:
-        query = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-        if not query:
-            await message.reply("yo say something •")
-            return
-
-        async with message.channel.typing():
-            key = f"{message.guild.id if message.guild else 'DM'}_{message.author.id}"
-            if key not in bot.history:
-                bot.history[key] = []
-
-            bot.history[key].append({"role": "user", "content": query})
-            bot.history[key] = bot.history[key][-MAX_HISTORY:]
-
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}] + bot.history[key]
-
-            try:
-                reply = await call_groq(messages)
-                bot.history[key].append({"role": "assistant", "content": reply})
-                await send_reply(message.channel, reply)
-            except Exception as e:
-                log.error(f"Groq failed: {e}")
-                await message.reply("my brain lagged out, try again •")
 
 # ========================= SLASH COMMANDS =========================
 
 @bot.tree.command(name="ask", description="Ask Certified anything")
 async def ask(interaction: discord.Interaction, query: str):
+    if not GROQ_API_KEY:
+        await interaction.response.send_message("api key missing, tell the owner •", ephemeral=True)
+        return
+        
     await interaction.response.defer()
     key = f"{interaction.guild_id or 'DM'}_{interaction.user.id}"
     if key not in bot.history:
@@ -166,6 +183,10 @@ async def clear(interaction: discord.Interaction):
 
 @bot.tree.command(name="img", description="Generate an uncensored image")
 async def img(interaction: discord.Interaction, prompt: str):
+    if not FAL_KEY:
+        await interaction.response.send_message("missing FAL_KEY env var, cannot gen images •", ephemeral=True)
+        return
+
     await interaction.response.defer()
 
     full_prompt = f"{prompt}, extremely detailed, cinematic, 8k, surreal, no censorship"
@@ -176,8 +197,6 @@ async def img(interaction: discord.Interaction, prompt: str):
         "guidance_scale": 3.5,
         "sync_mode": True
     }
-    
-    # FIX 2: Corrected variable name from FAL_API_KEY to FAL_KEY
     headers = {"Authorization": f"Key {FAL_KEY}"}
 
     try:
@@ -205,4 +224,7 @@ async def img(interaction: discord.Interaction, prompt: str):
 
 # ========================= RUN =========================
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("ERROR: You must set DISCORD_TOKEN in your environment variables.")
