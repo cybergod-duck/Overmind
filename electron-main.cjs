@@ -1,6 +1,23 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
 const path = require('path')
-const { execSync, exec, spawn } = require('child_process')
+const child_process = require('child_process')
+const execSync = (command, options) => {
+  return child_process.execSync(command, { windowsHide: true, ...options })
+}
+const exec = (command, options, callback) => {
+  if (typeof options === 'function') {
+    callback = options
+    options = {}
+  }
+  return child_process.exec(command, { windowsHide: true, ...options }, callback)
+}
+const spawn = (command, args, options) => {
+  if (args && !Array.isArray(args) && typeof args === 'object') {
+    options = args
+    args = []
+  }
+  return child_process.spawn(command, args, { windowsHide: true, ...options })
+}
 
 // ── Log-line normalizer for setup IPC ────────────────────────
 
